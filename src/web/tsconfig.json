@@ -1,0 +1,80 @@
+{
+  "compilerOptions": {
+    // ECMAScript Target and Module Configuration
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ESNext"
+    ],
+
+    // React and JSX Configuration
+    "jsx": "react-jsx",
+    "allowJs": true,
+
+    // Type Checking and Safety
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // Module Resolution and Import Configuration
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+
+    // Build Output Configuration
+    "noEmit": true,
+
+    // Path Aliases for Enhanced Developer Experience
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@components/*": ["src/components/*"],
+      "@pages/*": ["src/pages/*"],
+      "@hooks/*": ["src/hooks/*"],
+      "@utils/*": ["src/utils/*"],
+      "@services/*": ["src/services/*"],
+      "@types/*": ["src/types/*"],
+      "@constants/*": ["src/constants/*"],
+      "@assets/*": ["src/assets/*"],
+      "@styles/*": ["src/styles/*"],
+      "@layouts/*": ["src/layouts/*"],
+      "@contexts/*": ["src/contexts/*"],
+      "@features/*": ["src/features/*"],
+      "@api/*": ["src/api/*"]
+    }
+  },
+
+  // Source Files Configuration
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts",
+    "vite.config.ts"
+  ],
+
+  // Excluded Files and Directories
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "coverage",
+    "**/*.spec.ts",
+    "**/*.test.ts",
+    "**/*.stories.tsx"
+  ],
+
+  // Project References
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
+}
