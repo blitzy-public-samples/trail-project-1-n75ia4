@@ -1,0 +1,48 @@
+MIT License
+
+Copyright (c) 2024 Task Management System
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Additional Enterprise Terms:
+
+1. Data Protection and Privacy
+   This software may be used in compliance with GDPR, HIPAA, SOC 2, and other
+   applicable data protection regulations when properly configured and operated
+   by the licensee.
+
+2. Contribution Terms
+   Contributions to this software are subject to the same MIT license terms.
+   Contributors must ensure their contributions comply with enterprise security
+   and quality standards as outlined in CONTRIBUTING.md.
+
+3. Commercial Usage
+   This software is suitable for enterprise deployment and commercial use.
+   Organizations using this software must maintain compliance with applicable
+   industry regulations and standards.
+
+4. Audit and Compliance
+   While this software is designed to support various compliance requirements,
+   licensees are responsible for ensuring their specific implementation meets
+   their regulatory obligations.
+
+5. No Warranty for Compliance
+   The authors and copyright holders provide no warranty regarding the fitness
+   of this software for any particular compliance requirement or standard.
+   Organizations must independently verify compliance for their use case.
