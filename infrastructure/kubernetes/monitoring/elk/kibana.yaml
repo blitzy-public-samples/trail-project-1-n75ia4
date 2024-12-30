@@ -1,0 +1,202 @@
+---
+# ConfigMap for Kibana configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kibana-config
+  namespace: monitoring
+  labels:
+    app: kibana
+    component: monitoring
+data:
+  kibana.yml: |
+    server.name: task-management-kibana
+    server.host: "0.0.0.0"
+    server.ssl.enabled: true
+    server.ssl.certificate: "/etc/kibana/certs/tls.crt"
+    server.ssl.key: "/etc/kibana/certs/tls.key"
+    elasticsearch.hosts: ["https://elasticsearch:9200"]
+    elasticsearch.ssl.verificationMode: certificate
+    monitoring.ui.container.elasticsearch.enabled: true
+    xpack.security.enabled: true
+    xpack.reporting.enabled: true
+    xpack.spaces.enabled: true
+    xpack.encryptedSavedObjects.encryptionKey: "${ENCRYPTION_KEY}"
+    ui:
+      defaultRoute: /app/home
+      darkMode: false
+      fontSize: 14px
+    savedObjects:
+      maxImportPayloadBytes: 26214400
+      maxImportExportableCount: 10000
+      maxWildcardCount: 1000
+    reporting:
+      capture:
+        timeout: 20s
+        maxAttempts: 3
+        zoom: 2
+      csv:
+        maxSizeBytes: 10485760
+        scrollDuration: 30s
+      queue:
+        timeout: 2m
+    security:
+      session:
+        idleTimeout: 1h
+        lifespan: 24h
+        sameSite: strict
+      audit:
+        enabled: true
+        ignoreFilters: ["read"]
+        logFormat: json
+
+---
+# Kibana Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+  namespace: monitoring
+  labels:
+    app: kibana
+    component: monitoring
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5601"
+        prometheus.io/path: "/api/status"
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+      - name: kibana
+        # Kibana v8.0+ for enhanced security and monitoring capabilities
+        image: docker.elastic.co/kibana/kibana:8.0.0
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        ports:
+        - containerPort: 5601
+          name: https
+          protocol: TCP
+        resources:
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+        env:
+        - name: ELASTICSEARCH_HOSTS
+          value: "https://elasticsearch:9200"
+        - name: SERVER_HOST
+          value: "0.0.0.0"
+        - name: ELASTICSEARCH_SERVICEACCOUNT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: kibana-elasticsearch-credentials
+              key: token
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: kibana-secrets
+              key: encryption-key
+        volumeMounts:
+        - name: config
+          mountPath: /usr/share/kibana/config/kibana.yml
+          subPath: kibana.yml
+        - name: kibana-certs
+          mountPath: /etc/kibana/certs
+          readOnly: true
+        readinessProbe:
+          httpGet:
+            path: /api/status
+            port: 5601
+            scheme: HTTPS
+          initialDelaySeconds: 90
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /api/status
+            port: 5601
+            scheme: HTTPS
+          initialDelaySeconds: 180
+          periodSeconds: 20
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+      volumes:
+      - name: config
+        configMap:
+          name: kibana-config
+      - name: kibana-certs
+        secret:
+          secretName: kibana-tls-certificates
+
+---
+# Kibana Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana
+  namespace: monitoring
+  labels:
+    app: kibana
+    component: monitoring
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5601
+    targetPort: 5601
+    protocol: TCP
+    name: https
+  selector:
+    app: kibana
+
+---
+# Kibana Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kibana-ingress
+  namespace: monitoring
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+spec:
+  tls:
+  - hosts:
+    - kibana.task-management.com
+    secretName: kibana-tls
+  rules:
+  - host: kibana.task-management.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: kibana
+            port:
+              number: 5601
