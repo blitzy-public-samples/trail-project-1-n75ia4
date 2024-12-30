@@ -1,0 +1,297 @@
+// =============================================================================
+// Global Styles
+// =============================================================================
+// Core global SCSS file implementing enterprise-grade styling with enhanced
+// accessibility, RTL support, and touch optimization
+// Version: 1.0.0
+// Dependencies: normalize.css ^8.0.1
+
+@import 'normalize.css'; // v8.0.1 - CSS reset and normalization
+@import './variables';
+@import './mixins';
+@import './animations';
+@import './themes';
+
+// -----------------------------------------------------------------------------
+// CSS Reset & Base Styles
+// -----------------------------------------------------------------------------
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+// Enhanced touch optimization and performance
+html {
+  font-size: 16px; // Base font size
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  content-visibility: auto;
+  contain: content;
+}
+
+body {
+  font-family: var(--font-family-primary);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+  color: var(--text-primary);
+  background-color: var(--background-primary);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+// -----------------------------------------------------------------------------
+// Layout & Visual Hierarchy
+// -----------------------------------------------------------------------------
+
+// F-pattern layout container
+.container {
+  @include content-width;
+  @include golden-ratio-spacing;
+  width: 100%;
+  max-width: map-get($breakpoints, 'content-max');
+  margin: 0 auto;
+  
+  @include rtl {
+    direction: rtl;
+  }
+}
+
+// Grid system with RTL support
+.grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: map-get(map-get($grid, 'gutter'), 'mobile');
+  
+  @include responsive('tablet') {
+    gap: map-get(map-get($grid, 'gutter'), 'tablet');
+  }
+  
+  @include responsive('desktop') {
+    gap: map-get(map-get($grid, 'gutter'), 'desktop');
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Typography & Fluid Scaling
+// -----------------------------------------------------------------------------
+
+// Fluid typography implementation
+@each $heading in ('h1', 'h2', 'h3', 'h4', 'h5', 'h6') {
+  #{$heading} {
+    @include fluid-text($heading);
+    margin-bottom: map-get(map-get($spacing, 'scale'), 'md');
+    font-weight: map-get(map-get($typography, 'font-weight'), 'bold');
+    line-height: map-get(map-get($typography, 'line-height'), 'tight');
+  }
+}
+
+p {
+  margin-bottom: map-get(map-get($spacing, 'scale'), 'md');
+  max-width: 75ch; // Optimal reading length
+}
+
+// -----------------------------------------------------------------------------
+// Touch Optimization & Interaction
+// -----------------------------------------------------------------------------
+
+// Enhanced touch targets
+button,
+input,
+select,
+textarea,
+[role="button"] {
+  min-height: 48px; // Minimum touch target size
+  min-width: 48px;
+  padding: map-get(map-get($spacing, 'scale'), 'sm');
+  
+  @media (pointer: fine) {
+    min-height: 36px;
+    min-width: 36px;
+  }
+}
+
+// Focus states with high contrast support
+a,
+button,
+input,
+select,
+textarea,
+[tabindex]:not([tabindex="-1"]) {
+  @include a11y-focus;
+  
+  &:focus:not(:focus-visible) {
+    outline: none;
+    box-shadow: none;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Accessibility Utilities
+// -----------------------------------------------------------------------------
+
+// Screen reader only content
+.sr-only {
+  @include screen-reader-only;
+}
+
+// Skip navigation link
+.skip-link {
+  @include screen-reader-only;
+  
+  &:focus {
+    position: fixed;
+    top: map-get(map-get($spacing, 'scale'), 'sm');
+    left: map-get(map-get($spacing, 'scale'), 'sm');
+    width: auto;
+    height: auto;
+    padding: map-get(map-get($spacing, 'scale'), 'sm');
+    background-color: var(--background-primary);
+    z-index: map-get($z-index, 'modal');
+  }
+}
+
+// Reduced motion
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// RTL Support
+// -----------------------------------------------------------------------------
+
+[dir="rtl"] {
+  text-align: right;
+  
+  .grid {
+    direction: rtl;
+  }
+  
+  // Flip icons and directional elements
+  [class*="icon-"],
+  [class*="arrow-"] {
+    transform: scaleX(-1);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Print Styles
+// -----------------------------------------------------------------------------
+
+@media print {
+  *,
+  *::before,
+  *::after {
+    background: transparent !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  
+  a[href]::after {
+    content: " (" attr(href) ")";
+  }
+  
+  abbr[title]::after {
+    content: " (" attr(title) ")";
+  }
+  
+  pre,
+  blockquote {
+    border: 1px solid #999;
+    page-break-inside: avoid;
+  }
+  
+  thead {
+    display: table-header-group;
+  }
+  
+  tr,
+  img {
+    page-break-inside: avoid;
+  }
+  
+  p,
+  h2,
+  h3 {
+    orphans: 3;
+    widows: 3;
+  }
+  
+  h2,
+  h3 {
+    page-break-after: avoid;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Utility Classes
+// -----------------------------------------------------------------------------
+
+// Display utilities
+.hidden {
+  display: none !important;
+}
+
+.visible {
+  display: block !important;
+}
+
+// Spacing utilities with RTL support
+@each $space-key, $space-value in map-get($spacing, 'scale') {
+  .m-#{$space-key} {
+    margin: $space-value;
+  }
+  
+  .mx-#{$space-key} {
+    @include logical-property('margin', $space-value);
+  }
+  
+  .p-#{$space-key} {
+    padding: $space-value;
+  }
+  
+  .px-#{$space-key} {
+    @include logical-property('padding', $space-value);
+  }
+}
+
+// Flexbox utilities
+.flex {
+  display: flex;
+  
+  &-center {
+    @include flex-center;
+  }
+  
+  &-between {
+    justify-content: space-between;
+  }
+}
+
+// High contrast mode utilities
+@include high-contrast-mode {
+  .high-contrast-border {
+    border: 2px solid currentColor;
+  }
+  
+  .high-contrast-text {
+    color: currentColor !important;
+  }
+}
