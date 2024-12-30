@@ -1,0 +1,35 @@
+# Kubernetes Service manifest for Prometheus monitoring server
+# Version: v1.27+
+# Purpose: Exposes Prometheus server endpoints for monitoring and metrics collection
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+    component: monitoring
+    environment: production
+    tier: monitoring
+    managed-by: kubernetes
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    description: "Prometheus monitoring service for Task Management System"
+    security.kubernetes.io/network-restriction: "true"
+spec:
+  type: ClusterIP  # Internal-only access for security
+  ports:
+    - name: http
+      port: 9090  # Service port
+      targetPort: 9090  # Container port
+      protocol: TCP
+  selector:
+    app: prometheus  # Matches pods with label app=prometheus
+  sessionAffinity: None  # No session stickiness required
+  publishNotReadyAddresses: false  # Only expose ready pods
+  # Enhanced service configuration
+  internalTrafficPolicy: Cluster
+  ipFamilyPolicy: SingleStack
+  ipFamilies:
+    - IPv4
