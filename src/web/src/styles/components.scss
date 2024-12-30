@@ -1,0 +1,278 @@
+// =============================================================================
+// Core Component Styles
+// =============================================================================
+// Enterprise-grade SCSS components implementing Material Design 3 principles
+// with enhanced accessibility, performance optimization, and theming support.
+// Version: 1.0.0
+
+@import './variables';
+@import './mixins';
+@import './animations';
+
+// -----------------------------------------------------------------------------
+// Button Component
+// -----------------------------------------------------------------------------
+
+.btn {
+  // Base styles
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: spacing(1.5) spacing(2);
+  border-radius: 4px;
+  font-family: map-get(map-get($typography, 'font-family'), 'primary');
+  font-weight: map-get(map-get($typography, 'font-weight'), 'medium');
+  font-size: map-get(map-get($typography, 'font-size'), 'base');
+  line-height: map-get(map-get($typography, 'line-height'), 'base');
+  text-align: center;
+  cursor: pointer;
+  border: none;
+  transition: all map-get(map-get($transitions, 'duration'), 'base') map-get(map-get($transitions, 'timing'), 'ease-in-out');
+  will-change: transform, background-color, box-shadow;
+
+  // Accessibility
+  @include a11y-focus();
+  @include reduced-motion();
+
+  // Variants
+  &--primary {
+    background-color: map-get(map-get($colors, 'primary'), 'base');
+    color: map-get(map-get($colors, 'primary'), 'contrast');
+
+    &:hover {
+      background-color: map-get(map-get($colors, 'primary'), 'dark');
+      transform: translateY(-1px);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+  }
+
+  &--secondary {
+    background-color: map-get(map-get($colors, 'secondary'), 'base');
+    color: map-get(map-get($colors, 'secondary'), 'contrast');
+
+    &:hover {
+      background-color: map-get(map-get($colors, 'secondary'), 'dark');
+      transform: translateY(-1px);
+    }
+  }
+
+  &--outlined {
+    border: 2px solid map-get(map-get($colors, 'primary'), 'base');
+    background-color: transparent;
+    color: map-get(map-get($colors, 'primary'), 'base');
+
+    &:hover {
+      background-color: rgba(map-get(map-get($colors, 'primary'), 'base'), 0.1);
+    }
+  }
+
+  // States
+  &--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  &--loading {
+    position: relative;
+    pointer-events: none;
+
+    &::after {
+      content: '';
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      margin-left: spacing(1);
+      @extend .rotate;
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Card Component
+// -----------------------------------------------------------------------------
+
+.card {
+  // Base styles
+  background-color: var(--surface-primary);
+  border-radius: 8px;
+  padding: spacing(2);
+  @include theme-aware('color', 'text-primary');
+  
+  // Variants
+  &--elevated {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: box-shadow map-get(map-get($transitions, 'duration'), 'base') map-get(map-get($transitions, 'timing'), 'ease-in-out');
+
+    &:hover {
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+  }
+
+  &--outlined {
+    border: 1px solid var(--border-primary);
+  }
+
+  // High contrast support
+  @include high-contrast-mode {
+    border: 1px solid ButtonText;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Input Component
+// -----------------------------------------------------------------------------
+
+.input {
+  // Base styles
+  display: block;
+  width: 100%;
+  padding: spacing(1.5) spacing(2);
+  border: 2px solid var(--border-primary);
+  border-radius: 4px;
+  background-color: var(--surface-primary);
+  font-family: map-get(map-get($typography, 'font-family'), 'primary');
+  font-size: map-get(map-get($typography, 'font-size'), 'base');
+  line-height: map-get(map-get($typography, 'line-height'), 'base');
+  @include theme-aware('color', 'text-primary');
+
+  // Accessibility
+  @include a11y-focus();
+
+  // States
+  &--error {
+    border-color: map-get(map-get($colors, 'semantic'), 'error');
+
+    &:focus {
+      border-color: map-get(map-get($colors, 'semantic'), 'error');
+      box-shadow: 0 0 0 3px rgba(map-get(map-get($colors, 'semantic'), 'error'), 0.2);
+    }
+  }
+
+  &--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: var(--surface-secondary);
+  }
+
+  // RTL Support
+  @include rtl {
+    text-align: right;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Modal Component
+// -----------------------------------------------------------------------------
+
+.modal {
+  // Base styles
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: map-get($z-index, 'modal');
+
+  &__overlay {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    @extend .fade-in;
+  }
+
+  &__content {
+    position: relative;
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    background-color: var(--surface-primary);
+    border-radius: 8px;
+    padding: spacing(3);
+    overflow-y: auto;
+    @extend .scale-in;
+
+    @include responsive('tablet') {
+      width: 80%;
+    }
+  }
+
+  // Accessibility
+  &:focus {
+    outline: none;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Dropdown Component
+// -----------------------------------------------------------------------------
+
+.dropdown {
+  // Base styles
+  position: relative;
+  display: inline-block;
+
+  &__trigger {
+    cursor: pointer;
+  }
+
+  &__menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 200px;
+    background-color: var(--surface-primary);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: map-get($z-index, 'dropdown');
+    @extend .fade-in;
+
+    // RTL Support
+    @include rtl {
+      left: auto;
+      right: 0;
+    }
+  }
+
+  &__item {
+    padding: spacing(1.5) spacing(2);
+    cursor: pointer;
+    @include theme-aware('color', 'text-primary');
+
+    &:hover {
+      background-color: var(--surface-secondary);
+    }
+
+    // Accessibility
+    &:focus {
+      @include a11y-focus();
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Loading Component
+// -----------------------------------------------------------------------------
+
+.loading {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-primary);
+  border-radius: 50%;
+  border-top-color: map-get(map-get($colors, 'primary'), 'base');
+  @extend .rotate;
+
+  // Accessibility
+  @include reduced-motion {
+    animation: none;
+    border-top-color: var(--border-primary);
+  }
+}
