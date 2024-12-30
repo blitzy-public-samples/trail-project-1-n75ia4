@@ -1,0 +1,40 @@
+# Service configuration for task-management-web frontend
+# Version: v1
+# Purpose: Internal load balancing and service discovery for web frontend pods
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: web-service
+  namespace: web
+  labels:
+    app: task-management-web
+    tier: frontend
+    environment: production
+    managed-by: kubernetes
+  annotations:
+    # Enable Prometheus metrics collection
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "80"
+    # Specify AWS NLB for underlying load balancer type
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+
+spec:
+  # Use ClusterIP for secure internal access within the cluster
+  type: ClusterIP
+  
+  # Port configuration for HTTP traffic
+  ports:
+    - name: http  # Named port for better maintainability
+      port: 80    # Service port
+      targetPort: 80  # Container port in the pods
+      protocol: TCP   # Enforce TCP protocol
+  
+  # Pod selector using multiple labels for precise targeting
+  selector:
+    app: task-management-web
+    tier: frontend
+  
+  # Load balancing configuration
+  sessionAffinity: None  # Disable session affinity for better distribution
+  publishNotReadyAddresses: false  # Only route traffic to ready pods
