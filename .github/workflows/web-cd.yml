@@ -1,0 +1,164 @@
+name: Web CD
+
+# Trigger on successful completion of Web CI workflow
+on:
+  workflow_run:
+    workflows: ["Web CI"]
+    types: [completed]
+    branches: [main]
+
+# Environment variables
+env:
+  NODE_VERSION: '20.x'
+  PNPM_VERSION: '8.x'
+  AWS_REGION: 'us-east-1'
+  ECR_REPOSITORY: 'task-management-web'
+  KUBE_NAMESPACE: 'web'
+  DEPLOY_TIMEOUT: '30m'
+  HEALTH_CHECK_RETRIES: '5'
+  ROLLBACK_ENABLED: 'true'
+
+# Permissions required for OIDC authentication with AWS
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+  deployments: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    # Production environment configuration
+    environment:
+      name: production
+      url: https://app.taskmanagement.com
+    
+    # Deployment concurrency control
+    concurrency:
+      group: production
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          mask-password: true
+
+      - name: Get package version
+        id: package-version
+        run: |
+          VERSION=$(node -p "require('./src/web/package.json').version")
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          
+      - name: Build and push Docker image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          IMAGE_TAG: ${{ steps.package-version.outputs.version }}
+        run: |
+          # Build Docker image with security hardening
+          docker build \
+            --build-arg NODE_VERSION=${{ env.NODE_VERSION }} \
+            --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+            --build-arg VCS_REF=${{ github.sha }} \
+            --build-arg VERSION=${{ steps.package-version.outputs.version }} \
+            --no-cache \
+            --tag $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG \
+            --tag $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest \
+            --file src/web/Dockerfile \
+            src/web/
+
+          # Run Trivy vulnerability scanner
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:latest image \
+            --exit-code 1 \
+            --severity HIGH,CRITICAL \
+            $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+
+          # Push images with signed manifests
+          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest
+          
+          echo "image=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Setup Kubernetes configuration
+        run: |
+          echo "${{ secrets.KUBE_CONFIG }}" > kubeconfig
+          echo "KUBECONFIG=$(pwd)/kubeconfig" >> $GITHUB_ENV
+
+      - name: Deploy to Kubernetes
+        id: deploy
+        run: |
+          # Update deployment with new image
+          kubectl -n ${{ env.KUBE_NAMESPACE }} set image deployment/web \
+            web=${{ steps.build-image.outputs.image }}
+
+          # Wait for rollout to complete
+          kubectl -n ${{ env.KUBE_NAMESPACE }} rollout status deployment/web \
+            --timeout=${{ env.DEPLOY_TIMEOUT }}
+
+          # Verify deployment health
+          for i in $(seq 1 ${{ env.HEALTH_CHECK_RETRIES }}); do
+            if kubectl -n ${{ env.KUBE_NAMESPACE }} get pods -l app=web \
+              -o jsonpath='{.items[*].status.containerStatuses[*].ready}' | grep -q false; then
+              echo "Deployment not healthy, attempt $i of ${{ env.HEALTH_CHECK_RETRIES }}"
+              sleep 10
+            else
+              echo "Deployment healthy"
+              exit 0
+            fi
+          done
+          
+          echo "Deployment health check failed"
+          exit 1
+
+      - name: Notify Datadog of deployment
+        if: success()
+        uses: datadog/action-notify@v1
+        with:
+          api-key: ${{ secrets.DATADOG_API_KEY }}
+          description: "Deployed web version ${{ steps.package-version.outputs.version }}"
+          tags: "service:web,version:${{ steps.package-version.outputs.version }}"
+
+      - name: Notify Slack on failure
+        if: failure()
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{
+              "text": "❌ Web deployment failed!\nVersion: ${{ steps.package-version.outputs.version }}\nWorkflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }' \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Rollback on failure
+        if: failure() && env.ROLLBACK_ENABLED == 'true'
+        run: |
+          kubectl -n ${{ env.KUBE_NAMESPACE }} rollout undo deployment/web
+          kubectl -n ${{ env.KUBE_NAMESPACE }} rollout status deployment/web \
+            --timeout=${{ env.DEPLOY_TIMEOUT }}
