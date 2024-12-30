@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: monitoring
+  labels:
+    app: grafana
+    component: monitoring
+    part-of: task-management-system
+data:
+  # Main Grafana configuration file
+  grafana.ini: |
+    # Server Configuration
+    [server]
+    protocol = http
+    http_port = 3000
+    domain = grafana.monitoring.svc.cluster.local
+    root_url = %(protocol)s://%(domain)s:%(http_port)s/
+    serve_from_sub_path = true
+    enable_gzip = true
+    read_timeout = 30s
+    write_timeout = 30s
+
+    # Enhanced Security Configuration
+    [security]
+    # Admin credentials from environment variables
+    admin_user = admin
+    admin_password = ${GRAFANA_ADMIN_PASSWORD}
+    secret_key = ${GRAFANA_SECRET_KEY}
+    
+    # Security controls
+    disable_gravatar = true
+    cookie_secure = true
+    cookie_samesite = strict
+    allow_embedding = false
+    strict_transport_security = true
+    strict_transport_security_max_age_seconds = 31536000
+    content_security_policy = true
+    content_security_policy_template = "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+
+    # Authentication Configuration
+    [auth]
+    disable_login_form = false
+    disable_signout_menu = false
+    oauth_auto_login = false
+    login_maximum_inactive_lifetime_duration = 7d
+    login_maximum_lifetime_duration = 30d
+    token_rotation_interval_minutes = 60
+
+    # User Management
+    [users]
+    allow_sign_up = false
+    auto_assign_org = true
+    auto_assign_org_role = Viewer
+    default_theme = dark
+    viewers_can_edit = false
+    editors_can_admin = false
+
+    # Dashboard Configuration
+    [dashboards]
+    versions_to_keep = 20
+    min_refresh_interval = 5s
+    default_home_dashboard_path = /var/lib/grafana/dashboards/overview.json
+
+    # Database Configuration
+    [database]
+    type = sqlite3
+    path = /var/lib/grafana/grafana.db
+    cache_mode = private
+    wal = true
+    max_open_conn = 100
+    max_idle_conn = 50
+    conn_max_lifetime = 14400
+
+    # Logging Configuration
+    [log]
+    mode = console
+    level = info
+    filters = monitoring:debug
+    
+    # Metrics Endpoint Configuration
+    [metrics]
+    enabled = true
+    basic_auth_username = ${METRICS_USERNAME}
+    basic_auth_password = ${METRICS_PASSWORD}
+    interval_seconds = 10
+
+    # Analytics Configuration
+    [analytics]
+    reporting_enabled = false
+    check_for_updates = true
+    
+    # Unified Alerting
+    [unified_alerting]
+    enabled = true
+    execute_alerts = true
+    evaluation_timeout = 30s
+    max_attempts = 3
+
+  # Data Sources Configuration
+  datasources.yaml: |
+    apiVersion: 1
+    deleteDatasources:
+      - name: Prometheus
+        orgId: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-service:9090
+        isDefault: true
+        version: 1
+        editable: false
+        jsonData:
+          timeInterval: "15s"
+          queryTimeout: "30s"
+          httpMethod: "POST"
+          manageAlerts: true
+          prometheusType: "Prometheus"
+          prometheusVersion: "2.45.0"
+          exemplarTraceIdDestinations:
+            - name: trace_id
+              datasourceUid: jaeger
+        secureJsonData:
+          httpHeaderValue1: "Bearer ${PROMETHEUS_API_TOKEN}"
+
+  # Dashboard Provisioning Configuration
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: Default
+        folder: ""
+        type: file
+        disableDeletion: true
+        editable: false
+        updateIntervalSeconds: 60
+        allowUiUpdates: false
+        options:
+          path: /var/lib/grafana/dashboards
+          foldersFromFilesStructure: true
