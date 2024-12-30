@@ -1,0 +1,105 @@
+# Kubernetes NetworkPolicy configurations v1.27+
+# Implements zero-trust network security model with strict pod-to-pod communication controls
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  annotations:
+    description: "Global default deny-all policy implementing zero trust baseline"
+spec:
+  podSelector: {} # Applies to all pods
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress: [] # Deny all incoming traffic by default
+  egress: []  # Deny all outgoing traffic by default
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-web-to-backend
+  namespace: task-management
+  annotations:
+    description: "Controlled communication policy from web frontend to backend services"
+spec:
+  podSelector:
+    matchLabels:
+      app: task-management-backend
+      tier: backend
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: web
+      podSelector:
+        matchLabels:
+          app: task-management-frontend
+          tier: frontend
+    ports:
+    - protocol: TCP
+      port: 8080
+      name: http
+    - protocol: TCP
+      port: 443
+      name: https
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-storage
+  namespace: storage
+  annotations:
+    description: "Controlled access policy from backend services to storage components"
+spec:
+  podSelector:
+    matchLabels:
+      tier: storage
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: task-management
+      podSelector:
+        matchLabels:
+          app: task-management-backend
+          tier: backend
+    ports:
+    - protocol: TCP
+      port: 5432
+      name: postgresql
+    - protocol: TCP
+      port: 6379
+      name: redis
+    - protocol: TCP
+      port: 27017
+      name: mongodb
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring
+  annotations:
+    description: "Controlled access policy for monitoring and metrics collection"
+spec:
+  podSelector: {} # Applies to all pods
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+      podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+      name: metrics
