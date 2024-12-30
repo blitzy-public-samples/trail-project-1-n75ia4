@@ -1,0 +1,211 @@
+// @prisma/client v5.0+
+// Database schema for Task Management System
+// Implements enterprise-grade features including:
+// - Audit trails
+// - Soft deletes
+// - Optimistic locking
+// - Performance optimizations
+// - Type safety
+// - Referential integrity
+
+// Database connection configuration
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // Optimized connection pool settings
+  relationMode = "prisma"
+  extensions = [pgcrypto]
+}
+
+// Prisma Client generator configuration
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "filteredRelationCount", "extendedWhereUnique"]
+  engineType      = "binary"
+}
+
+// Enums for type safety and data consistency
+enum UserRole {
+  ADMIN
+  PROJECT_MANAGER
+  TEAM_LEAD
+  TEAM_MEMBER
+  GUEST
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum ProjectStatus {
+  PLANNING
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum ProjectPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  COMPLETED
+  BLOCKED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// User model with enhanced features
+model User {
+  id          String    @id @default(uuid()) @db.Uuid
+  email       String    @unique @db.VarChar(255)
+  name        String    @db.VarChar(100)
+  role        UserRole
+  status      UserStatus @default(ACTIVE)
+  preferences Json?
+  
+  // Audit fields
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime? // Soft delete support
+  version     Int       @default(1) // Optimistic locking
+  
+  // Relations
+  ownedProjects Project[] @relation("ProjectOwner")
+  assignedTasks Task[]    @relation("TaskAssignee")
+  createdTasks  Task[]    @relation("TaskCreator")
+  comments      Comment[] @relation("CommentAuthor")
+  
+  // Indexes for performance
+  @@index([email])
+  @@index([status])
+  @@index([role])
+  @@index([deletedAt])
+}
+
+// Project model with enhanced features
+model Project {
+  id          String          @id @default(uuid()) @db.Uuid
+  name        String          @db.VarChar(200)
+  description String?         @db.Text
+  status      ProjectStatus   @default(PLANNING)
+  priority    ProjectPriority @default(MEDIUM)
+  startDate   DateTime
+  endDate     DateTime?
+  metadata    Json?
+  
+  // Audit fields
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime? // Soft delete support
+  version     Int       @default(1) // Optimistic locking
+  
+  // Relations
+  ownerId     String    @db.Uuid
+  owner       User      @relation("ProjectOwner", fields: [ownerId], references: [id])
+  tasks       Task[]    @relation("ProjectTasks")
+  
+  // Indexes for performance
+  @@index([status])
+  @@index([priority])
+  @@index([startDate])
+  @@index([ownerId])
+  @@index([deletedAt])
+}
+
+// Task model with enhanced features
+model Task {
+  id          String       @id @default(uuid()) @db.Uuid
+  title       String       @db.VarChar(200)
+  description String?      @db.Text
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  dueDate     DateTime?
+  metadata    Json?
+  
+  // Audit fields
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime? // Soft delete support
+  version     Int       @default(1) // Optimistic locking
+  
+  // Relations
+  projectId   String    @db.Uuid
+  project     Project   @relation("ProjectTasks", fields: [projectId], references: [id])
+  assigneeId  String    @db.Uuid
+  assignee    User      @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creatorId   String    @db.Uuid
+  creator     User      @relation("TaskCreator", fields: [creatorId], references: [id])
+  comments    Comment[] @relation("TaskComments")
+  attachments Attachment[] @relation("TaskAttachments")
+  
+  // Indexes for performance
+  @@index([status])
+  @@index([priority])
+  @@index([dueDate])
+  @@index([projectId])
+  @@index([assigneeId])
+  @@index([creatorId])
+  @@index([deletedAt])
+}
+
+// Comment model for task discussions
+model Comment {
+  id        String    @id @default(uuid()) @db.Uuid
+  content   String    @db.Text
+  
+  // Audit fields
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Soft delete support
+  version   Int       @default(1) // Optimistic locking
+  
+  // Relations
+  taskId    String    @db.Uuid
+  task      Task      @relation("TaskComments", fields: [taskId], references: [id])
+  authorId  String    @db.Uuid
+  author    User      @relation("CommentAuthor", fields: [authorId], references: [id])
+  
+  // Indexes for performance
+  @@index([taskId])
+  @@index([authorId])
+  @@index([deletedAt])
+}
+
+// Attachment model for task files
+model Attachment {
+  id          String    @id @default(uuid()) @db.Uuid
+  filename    String    @db.VarChar(255)
+  filesize    Int
+  mimetype    String    @db.VarChar(100)
+  path        String    @db.VarChar(500)
+  
+  // Audit fields
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime? // Soft delete support
+  version     Int       @default(1) // Optimistic locking
+  
+  // Relations
+  taskId      String    @db.Uuid
+  task        Task      @relation("TaskAttachments", fields: [taskId], references: [id])
+  
+  // Indexes for performance
+  @@index([taskId])
+  @@index([deletedAt])
+}
