@@ -1,0 +1,86 @@
+# Kubernetes PodSecurityPolicy API version v1beta1 (Kubernetes 1.27+)
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: restricted
+  annotations:
+    kubernetes.io/description: "Highly restricted PSP for general application workloads"
+    seccomp.security.alpha.kubernetes.io/defaultProfileName: "runtime/default"
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: "runtime/default"
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  # Drop all capabilities by default
+  requiredDropCapabilities:
+    - ALL
+  # Allowed volume types for application workloads
+  volumes:
+    - configMap
+    - emptyDir
+    - projected
+    - secret
+    - downwardAPI
+    - persistentVolumeClaim
+  # Disable host namespace sharing
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  # User context restrictions
+  runAsUser:
+    rule: MustRunAsNonRoot
+  # SELinux context settings
+  seLinux:
+    rule: RunAsAny
+  # Supplemental groups configuration
+  supplementalGroups:
+    rule: MustRunAs
+    ranges:
+      - min: 1000
+        max: 65535
+  # Filesystem group settings
+  fsGroup:
+    rule: MustRunAs
+    ranges:
+      - min: 1000
+        max: 65535
+  # Enforce read-only root filesystem
+  readOnlyRootFilesystem: true
+  # Default seccomp profile
+  seccompProfile:
+    type: RuntimeDefault
+---
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: monitoring
+  annotations:
+    kubernetes.io/description: "Modified restrictive PSP for monitoring and observability tools"
+    seccomp.security.alpha.kubernetes.io/defaultProfileName: "runtime/default"
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: "runtime/default"
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  # Drop all capabilities by default
+  requiredDropCapabilities:
+    - ALL
+  # Allow all volume types for monitoring tools
+  volumes:
+    - '*'
+  # Allow host network access for monitoring
+  hostNetwork: true
+  hostIPC: false
+  hostPID: false
+  # More flexible user context for monitoring tools
+  runAsUser:
+    rule: RunAsAny
+  # SELinux context settings
+  seLinux:
+    rule: RunAsAny
+  # Flexible group management for monitoring
+  supplementalGroups:
+    rule: RunAsAny
+  fsGroup:
+    rule: RunAsAny
+  # Default seccomp profile
+  seccompProfile:
+    type: RuntimeDefault
