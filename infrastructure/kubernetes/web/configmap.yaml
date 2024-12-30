@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-config
+  namespace: web
+  labels:
+    app: task-management-web
+    tier: frontend
+    environment: ${ENV}
+    managed-by: kubernetes
+  annotations:
+    description: "Frontend configuration for Task Management System web application"
+    version: "1.0.0"
+    lastUpdated: "2024-01-01"
+data:
+  # Application Configuration
+  # Used for system identification and display purposes
+  VITE_APP_NAME: "Task Management System"
+
+  # API Configuration
+  # Backend service communication settings
+  VITE_API_URL: "http://api-service:3000"
+  VITE_API_VERSION: "v1"
+  VITE_API_TIMEOUT: "30000"  # 30 seconds timeout for API requests
+
+  # WebSocket Configuration
+  # Real-time updates and collaboration feature settings
+  VITE_WS_HOST: "ws-service:3000"
+  VITE_WS_RECONNECT_INTERVAL: "5000"  # 5 seconds between reconnection attempts
+  VITE_WS_MAX_RETRIES: "5"  # Maximum reconnection attempts
+  VITE_WS_PING_INTERVAL: "30000"  # 30 seconds heartbeat interval
+  VITE_WS_CONNECTION_TIMEOUT: "10000"  # 10 seconds connection timeout
