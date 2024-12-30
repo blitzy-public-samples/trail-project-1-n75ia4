@@ -1,0 +1,172 @@
+# Backend CI Pipeline
+# Version: 1.0.0
+# Implements comprehensive automated testing, code quality checks, and security scanning
+# with detailed reporting and failure handling for the backend service
+
+name: Backend CI
+
+on:
+  push:
+    branches: 
+      - main
+      - develop
+    paths:
+      - 'src/backend/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'src/backend/**'
+
+env:
+  NODE_VERSION: '20.x'
+  CACHE_KEY_PREFIX: 'backend-node-modules'
+  TEST_TIMEOUT: '300000'
+  COVERAGE_THRESHOLD: '80'
+  MAX_RETRIES: '3'
+  WORKING_DIRECTORY: 'src/backend'
+
+jobs:
+  test:
+    name: Test & Quality Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.WORKING_DIRECTORY }}/package-lock.json
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.WORKING_DIRECTORY }}/node_modules
+          key: ${{ env.CACHE_KEY_PREFIX }}-${{ matrix.node-version }}-${{ hashFiles('${{ env.WORKING_DIRECTORY }}/package-lock.json') }}
+          restore-keys: |
+            ${{ env.CACHE_KEY_PREFIX }}-${{ matrix.node-version }}-
+            ${{ env.CACHE_KEY_PREFIX }}-
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm ci --audit
+          npm audit fix --force || true
+
+      - name: Run linting
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm run lint
+          npm run lint:fix || true
+
+      - name: Run type checking
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run type-check
+
+      - name: Run unit tests
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm run test:unit -- --coverage --maxWorkers=2 \
+            --ci --reporters=default --reporters=jest-junit \
+            --forceExit --detectOpenHandles \
+            --coverageReporters=text --coverageReporters=lcov \
+            --coverageDirectory=./coverage
+        env:
+          JEST_JUNIT_OUTPUT_DIR: ./reports/junit
+          JEST_JUNIT_OUTPUT_NAME: unit-test-results.xml
+
+      - name: Run integration tests
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm run test:integration -- --maxWorkers=2 \
+            --ci --reporters=default --reporters=jest-junit \
+            --forceExit --detectOpenHandles \
+            --testTimeout=${{ env.TEST_TIMEOUT }}
+        env:
+          JEST_JUNIT_OUTPUT_DIR: ./reports/junit
+          JEST_JUNIT_OUTPUT_NAME: integration-test-results.xml
+
+      - name: Upload test coverage
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-coverage-${{ matrix.node-version }}
+          path: |
+            ${{ env.WORKING_DIRECTORY }}/coverage
+            ${{ env.WORKING_DIRECTORY }}/reports
+          retention-days: 14
+
+      - name: Cleanup
+        if: always()
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          rm -rf node_modules
+          rm -rf coverage
+          rm -rf reports
+
+  security:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run dependency vulnerability scan
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm audit --json > security-audit.json || true
+          npm audit fix --force --json > security-audit-fix.json || true
+
+      - name: Run SAST analysis
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm install -g @microsoft/eslint-formatter-sarif
+          npm run lint -- --format @microsoft/eslint-formatter-sarif \
+            --output-file eslint-results.sarif || true
+
+      - name: Run secret scanning
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_REPORT_PATH: gitleaks-report.json
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-reports
+          path: |
+            ${{ env.WORKING_DIRECTORY }}/security-audit.json
+            ${{ env.WORKING_DIRECTORY }}/security-audit-fix.json
+            ${{ env.WORKING_DIRECTORY }}/eslint-results.sarif
+            gitleaks-report.json
+          retention-days: 30
+
+      - name: Check for critical vulnerabilities
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          if jq -e '.advisories | select(.[].severity == "critical")' security-audit.json > /dev/null; then
+            echo "Critical vulnerabilities found!"
+            exit 1
+          fi
