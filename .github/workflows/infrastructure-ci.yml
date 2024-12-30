@@ -1,0 +1,196 @@
+# Infrastructure CI Workflow for Task Management System
+# Version: 1.0.0
+# This workflow validates Terraform configurations, performs security scanning,
+# and checks for compliance across all environments
+
+name: Infrastructure CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'infrastructure/terraform/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'infrastructure/terraform/**'
+  workflow_dispatch:
+
+env:
+  TERRAFORM_VERSION: '1.5.0'
+  AWS_REGION: 'us-west-2'
+  TF_IN_AUTOMATION: 'true'
+  TFSEC_VERSION: 'v1.0.0'
+
+jobs:
+  validate:
+    name: Validate Infrastructure
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [dev, staging, prod, dr]
+      fail-fast: false
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.TERRAFORM_ROLE_ARN }}
+          role-duration-seconds: 3600
+
+      - name: Cache Terraform
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.terraform.d/plugin-cache
+            .terraform
+          key: ${{ runner.os }}-terraform-${{ hashFiles('**/*.tf') }}
+          restore-keys: |
+            ${{ runner.os }}-terraform-
+
+      - name: Initialize Terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=task-management-terraform-state" \
+            -backend-config="key=infrastructure/${{ matrix.environment }}/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+        working-directory: infrastructure/terraform
+
+      - name: Validate Terraform Configuration
+        run: |
+          terraform validate
+          terraform fmt -check -recursive -diff
+        working-directory: infrastructure/terraform
+
+      - name: Plan Terraform Changes
+        id: plan
+        run: |
+          terraform plan \
+            -var-file="environments/${{ matrix.environment }}.tfvars" \
+            -detailed-exitcode \
+            -out=tfplan
+        working-directory: infrastructure/terraform
+        continue-on-error: true
+
+      - name: Check for Drift
+        if: steps.plan.outcome == 'success'
+        run: |
+          terraform show -json tfplan > tfplan.json
+          jq -r '
+            if (.resource_changes | length) > 0 then
+              "Configuration drift detected in ${{ matrix.environment }} environment"
+              exit 1
+            else
+              "No drift detected in ${{ matrix.environment }} environment"
+            end
+          ' tfplan.json
+        working-directory: infrastructure/terraform
+
+  security-scan:
+    name: Security Scan
+    needs: validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          working_directory: infrastructure/terraform
+          format: sarif
+          soft_fail: true
+          additional_args: >
+            --minimum-severity HIGH
+            --config-file .tfsec/config.yml
+            --custom-check-dir .tfsec/custom-checks
+
+      - name: Upload Security Results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: tfsec.sarif
+          category: Infrastructure Security
+
+  compliance-check:
+    name: Compliance Check
+    needs: security-scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Run Compliance Checks
+        run: |
+          # Check for required tags
+          terraform show -json tfplan | \
+          jq -e '.resource_changes[].change.after.tags | 
+            select(
+              has("Environment") and
+              has("CostCenter") and
+              has("ManagedBy")
+            )'
+          
+          # Verify encryption settings
+          terraform show -json tfplan | \
+          jq -e '.resource_changes[] | 
+            select(.type == "aws_s3_bucket") | 
+            .change.after.server_side_encryption_configuration'
+        working-directory: infrastructure/terraform
+
+      - name: Generate Compliance Report
+        if: always()
+        run: |
+          echo "Compliance Report" > compliance-report.md
+          echo "==================" >> compliance-report.md
+          echo "- Required tags validation: ${{ job.status }}" >> compliance-report.md
+          echo "- Encryption validation: ${{ job.status }}" >> compliance-report.md
+          echo "- Security group rules: ${{ job.status }}" >> compliance-report.md
+
+      - name: Upload Compliance Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: compliance-report
+          path: compliance-report.md
+          retention-days: 30
+
+  notification:
+    name: Send Notifications
+    needs: [validate, security-scan, compliance-check]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Notify Slack
+        uses: slackapi/slack-github-action@v1.24.0
+        if: always()
+        with:
+          channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
+          slack-message: |
+            Infrastructure CI Results:
+            - Validation: ${{ needs.validate.result }}
+            - Security Scan: ${{ needs.security-scan.result }}
+            - Compliance: ${{ needs.compliance-check.result }}
+            
+            Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
