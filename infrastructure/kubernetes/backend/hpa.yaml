@@ -1,0 +1,68 @@
+# HorizontalPodAutoscaler API version: v2 (Kubernetes 1.27+)
+# Provides advanced metrics support and sophisticated scaling behavior
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  namespace: task-management
+  labels:
+    app: backend
+    environment: production
+    component: api
+    managed-by: kubernetes
+    tier: backend
+  annotations:
+    description: "HPA for backend service with optimized scaling behavior"
+    monitoring.kubernetes.io/enable: "true"
+    kubernetes.io/last-applied-configuration: |
+      {"source": "infrastructure/kubernetes/backend/hpa.yaml"}
+    autoscaling.alpha.kubernetes.io/metrics-visibility: "true"
+
+spec:
+  # Target the backend deployment for autoscaling
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+
+  # Production-grade replica bounds
+  minReplicas: 2  # Ensure high availability
+  maxReplicas: 10 # Cap maximum resource consumption
+
+  # Multi-metric scaling configuration
+  metrics:
+    # CPU-based scaling
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70  # Conservative CPU threshold
+
+    # Memory-based scaling
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80  # Memory threshold with headroom
+
+  # Advanced scaling behavior configuration
+  behavior:
+    # Scale up configuration - Responsive but controlled
+    scaleUp:
+      stabilizationWindowSeconds: 60  # 1-minute stabilization window
+      policies:
+      - type: Pods
+        value: 2                      # Add up to 2 pods at a time
+        periodSeconds: 60             # Every 1 minute
+      selectPolicy: Max              # Use most aggressive policy
+
+    # Scale down configuration - Conservative to prevent thrashing
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 5-minute cool-down period
+      policies:
+      - type: Pods
+        value: 1                       # Remove 1 pod at a time
+        periodSeconds: 60              # Every 1 minute
+      selectPolicy: Min               # Use most conservative policy
