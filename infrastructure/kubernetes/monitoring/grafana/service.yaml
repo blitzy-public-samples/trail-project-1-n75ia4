@@ -1,0 +1,44 @@
+# Kubernetes Service manifest for Grafana monitoring dashboard
+# Version: kubernetes v1.27+
+# Purpose: Exposes Grafana deployment with internal cluster access and load balancing
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: grafana-service
+  namespace: monitoring
+  labels:
+    app: grafana
+    component: monitoring
+    environment: production
+    tier: visualization
+    managed-by: kubernetes
+  annotations:
+    monitoring.kubernetes.io/service-name: "grafana"
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3000"
+
+spec:
+  type: ClusterIP  # Internal cluster access only
+  ports:
+    - name: http-grafana
+      port: 3000  # Service port
+      targetPort: 3000  # Container port
+      protocol: TCP
+  
+  # Selector matches pods from grafana deployment
+  selector:
+    app: grafana
+    component: monitoring
+  
+  # Session affinity configuration for consistent dashboard access
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800  # 3 hour timeout for session stickiness
+
+  # Publishing configuration
+  publishNotReadyAddresses: false
+  
+  # Internal traffic policy for improved security
+  internalTrafficPolicy: Cluster
