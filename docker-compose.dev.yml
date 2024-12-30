@@ -1,0 +1,142 @@
+version: '3.8'
+
+services:
+  # Backend API service
+  backend:
+    build:
+      context: ./src/backend
+      target: development
+    volumes:
+      - ./src/backend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"  # API port
+      - "9229:9229"  # Debug port
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/taskmanagement_dev
+      REDIS_URL: redis://redis:6379
+      MONGODB_URL: mongodb://mongodb:27017/taskmanagement_dev
+      RABBITMQ_URL: amqp://rabbitmq:5672
+    command: pnpm run dev
+    depends_on:
+      - postgres
+      - redis
+      - mongodb
+      - rabbitmq
+    networks:
+      - development
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend web application
+  web:
+    build:
+      context: ./src/web
+      target: development
+    volumes:
+      - ./src/web:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"  # Vite dev server port
+    environment:
+      NODE_ENV: development
+      VITE_API_URL: http://localhost:3000
+      VITE_WS_URL: ws://localhost:3000
+    command: pnpm run dev
+    networks:
+      - development
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine  # v15+ as specified in technical requirements
+    environment:
+      POSTGRES_DB: taskmanagement_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    networks:
+      - development
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis cache
+  redis:
+    image: redis:7.0-alpine  # v7.0+ as specified in technical requirements
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - development
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB document store
+  mongodb:
+    image: mongo:6.0-focal  # v6.0+ as specified in technical requirements
+    environment:
+      MONGO_INITDB_DATABASE: taskmanagement_dev
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_dev_data:/data/db
+    networks:
+      - development
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # RabbitMQ message broker
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine  # v3.12+ with management console
+    ports:
+      - "5672:5672"    # AMQP port
+      - "15672:15672"  # Management console
+    volumes:
+      - rabbitmq_dev_data:/var/lib/rabbitmq
+    networks:
+      - development
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_dev_data:
+    name: taskmanagement_postgres_dev
+  redis_dev_data:
+    name: taskmanagement_redis_dev
+  mongodb_dev_data:
+    name: taskmanagement_mongodb_dev
+  rabbitmq_dev_data:
+    name: taskmanagement_rabbitmq_dev
+
+networks:
+  development:
+    name: taskmanagement_dev
+    driver: bridge
