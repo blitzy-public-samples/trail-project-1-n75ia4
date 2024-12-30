@@ -1,0 +1,82 @@
+# Kubernetes Service configuration for Jaeger distributed tracing system
+# Version: 1.0.0
+# Kubernetes API Version: v1 (1.27+)
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: jaeger
+  namespace: monitoring
+  labels:
+    app: jaeger
+    component: monitoring
+    environment: production
+    version: 1.0.0
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "16686"
+    prometheus.io/path: "/metrics"
+    description: "Jaeger distributed tracing system service endpoints"
+
+spec:
+  type: ClusterIP
+  selector:
+    app: jaeger
+
+  ports:
+    # Web UI endpoint for querying and visualizing traces
+    - name: query-ui
+      port: 16686
+      targetPort: 16686
+      protocol: TCP
+
+    # Collector endpoint for receiving spans via HTTP
+    - name: collector-http
+      port: 14268
+      targetPort: 14268
+      protocol: TCP
+
+    # Agent endpoint for receiving spans via UDP compact thrift protocol
+    - name: agent-compact
+      port: 6831
+      targetPort: 6831
+      protocol: UDP
+
+    # Zipkin-compatible collector endpoint
+    - name: zipkin-collector
+      port: 9411
+      targetPort: 9411
+      protocol: TCP
+
+---
+# ServiceMonitor configuration for Prometheus monitoring
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: jaeger-monitor
+  namespace: monitoring
+  labels:
+    app: jaeger
+    component: monitoring
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: jaeger
+  namespaceSelector:
+    matchNames:
+      - monitoring
+  endpoints:
+    # Query UI metrics endpoint
+    - port: query-ui
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      scheme: http
+
+    # Collector metrics endpoint
+    - port: collector-http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      scheme: http
