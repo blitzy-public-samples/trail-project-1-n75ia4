@@ -1,0 +1,68 @@
+# Version: 1.0
+# Last Updated: 2024
+
+# Default rules for all web crawlers
+User-agent: *
+
+# Crawl-delay to prevent server overload
+Crawl-delay: 10
+
+# Allow public routes and resources
+Allow: /
+Allow: /static/
+Allow: /assets/
+Allow: /manifest.json
+Allow: /favicon.ico
+Allow: /index.html
+Allow: /images/
+Allow: /css/
+Allow: /fonts/
+
+# Protect sensitive routes and endpoints
+Disallow: /api/
+Disallow: /auth/
+Disallow: /private/
+Disallow: /admin/
+Disallow: /user/
+Disallow: /settings/
+Disallow: /internal/
+
+# Block URLs with sensitive parameters
+Disallow: /*?*token=
+Disallow: /*?*session=
+
+# Prevent direct access to data files
+Disallow: /*.json$
+Disallow: /*.js$
+
+# Specific rules for major search engines
+User-agent: Googlebot
+Crawl-delay: 5
+
+User-agent: Bingbot
+Crawl-delay: 5
+
+User-agent: DuckDuckBot
+Crawl-delay: 5
+
+# Block known malicious bots
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: SemrushBot
+Disallow: /
+
+# Sitemap declaration
+Sitemap: https://taskmanagement.com/sitemap.xml
+
+# Additional documentation:
+# This robots.txt implements security measures while optimizing SEO
+# - Protects sensitive routes and API endpoints
+# - Allows crawling of public content and resources
+# - Implements rate limiting through crawl-delay
+# - Blocks access to sensitive URL parameters
+# - Provides specific rules for major search engines
+# - References sitemap for optimal content discovery
