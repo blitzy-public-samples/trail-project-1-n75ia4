@@ -1,0 +1,145 @@
+# RabbitMQ Kubernetes Configuration
+# Version: v1.27+
+# Dependencies:
+# - rabbitmq:3.12-management
+# - kubernetes v1.27+
+
+---
+# Headless Service for RabbitMQ cluster discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: storage
+  labels:
+    app: rabbitmq
+    tier: message-queue
+    component: messaging
+spec:
+  ports:
+    - port: 5672
+      name: amqp
+      protocol: TCP
+    - port: 15672
+      name: management
+      protocol: TCP
+    - port: 4369
+      name: epmd
+      protocol: TCP
+    - port: 25672
+      name: clustering
+      protocol: TCP
+  selector:
+    app: rabbitmq
+  clusterIP: None
+  type: ClusterIP
+
+---
+# StatefulSet for RabbitMQ cluster deployment
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  namespace: storage
+spec:
+  serviceName: rabbitmq
+  replicas: 3  # High availability with 3 nodes
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+        tier: message-queue
+    spec:
+      # Pod anti-affinity to ensure high availability across nodes
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: rabbitmq
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:3.12-management
+          ports:
+            - containerPort: 5672
+              name: amqp
+            - containerPort: 15672
+              name: management
+            - containerPort: 4369
+              name: epmd
+            - containerPort: 25672
+              name: clustering
+          env:
+            - name: RABBITMQ_ERLANG_COOKIE
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secret
+                  key: erlang-cookie
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secret
+                  key: username
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secret
+                  key: password
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+            - name: config
+              mountPath: /etc/rabbitmq
+          # Health checks for container lifecycle management
+          livenessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "status"]
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 15
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "check_port_connectivity"]
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          startupProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "check_running"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+      # Security context for running as non-root
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
+      volumes:
+        - name: config
+          configMap:
+            name: rabbitmq-config
+  # Persistent volume claims for data storage
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+        storageClassName: standard
