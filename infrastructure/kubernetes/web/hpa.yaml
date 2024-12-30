@@ -1,0 +1,57 @@
+# HorizontalPodAutoscaler configuration for task-management-web frontend
+# Version: autoscaling/v2 (Kubernetes 1.23+)
+# Purpose: Automatically scale web frontend pods based on CPU and memory utilization
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web-hpa
+  namespace: web
+  labels:
+    app: task-management-web
+    tier: frontend
+spec:
+  # Target the web frontend deployment
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web-deployment
+  
+  # High availability configuration with min 2 replicas
+  minReplicas: 2  # Ensures HA and load distribution
+  maxReplicas: 10 # Maximum scale based on capacity planning
+  
+  # Multi-metric scaling criteria
+  metrics:
+    # CPU-based scaling
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70  # Proactive scaling threshold
+    
+    # Memory-based scaling
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80  # Conservative memory threshold
+  
+  # Advanced scaling behavior configuration
+  behavior:
+    # Quick scale-up for responsiveness
+    scaleUp:
+      stabilizationWindowSeconds: 60  # Short window for fast reaction
+      policies:
+        - type: Pods
+          value: 2  # Add up to 2 pods at a time
+          periodSeconds: 60
+    
+    # Conservative scale-down to prevent thrashing
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 5-minute window for stability
+      policies:
+        - type: Pods
+          value: 1  # Remove 1 pod at a time
+          periodSeconds: 60
