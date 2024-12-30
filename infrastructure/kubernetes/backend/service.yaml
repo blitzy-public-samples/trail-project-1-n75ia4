@@ -1,0 +1,48 @@
+# Kubernetes Service configuration for backend service
+# Version: v1
+# Purpose: Internal service discovery and load balancing for backend pods
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: backend
+  namespace: task-management
+  labels:
+    app: backend
+    environment: production
+    tier: backend
+    managed-by: kubernetes
+    version: v1
+  annotations:
+    # Prometheus monitoring configuration
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3000"
+    prometheus.io/path: "/metrics"
+    
+    # Topology-aware routing configuration
+    service.kubernetes.io/topology-aware-hints: "auto"
+    
+    # AWS Load Balancer configuration
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+
+spec:
+  # Using ClusterIP for internal service discovery
+  type: ClusterIP
+  
+  # Port configuration mapping service port 80 to container port 3000
+  ports:
+    - name: http-backend
+      port: 80
+      targetPort: 3000
+      protocol: TCP
+  
+  # Pod selector matching deployment labels
+  selector:
+    app: backend
+    tier: backend
+  
+  # Session handling and traffic policy configuration
+  sessionAffinity: None
+  publishNotReadyAddresses: false
+  internalTrafficPolicy: Cluster
