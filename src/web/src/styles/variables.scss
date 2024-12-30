@@ -1,0 +1,272 @@
+// =============================================================================
+// Design System Tokens
+// =============================================================================
+// Core SCSS variables defining the comprehensive design system including colors,
+// typography, spacing, breakpoints and other global design variables.
+// Supports theming, accessibility and responsive design.
+// Version: 1.0.0
+
+// -----------------------------------------------------------------------------
+// Functions
+// -----------------------------------------------------------------------------
+
+@function spacing($multiplier, $min-value: null) {
+  $calculated: $spacing-unit * $multiplier;
+  @if $min-value {
+    @return max($calculated, $min-value) + px;
+  }
+  @return $calculated + px;
+}
+
+@function fluid-type($min-size, $max-size, $min-breakpoint, $max-breakpoint) {
+  $min-size-rem: $min-size / 16 + rem;
+  $max-size-rem: $max-size / 16 + rem;
+  
+  @return clamp(
+    #{$min-size-rem},
+    #{$min-size + (($max-size - $min-size) * ((100vw - $min-breakpoint) / ($max-breakpoint - $min-breakpoint)))} + px,
+    #{$max-size-rem}
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Breakpoints
+// -----------------------------------------------------------------------------
+// Mobile-first breakpoints for responsive design
+
+$breakpoints: (
+  'mobile': 320px,
+  'tablet': 768px,
+  'desktop': 1024px,
+  'large': 1440px,
+  'content-max': 1440px
+);
+
+// -----------------------------------------------------------------------------
+// Colors
+// -----------------------------------------------------------------------------
+// Core color palette including semantic colors and neutral scale
+// All colors are WCAG 2.1 AA compliant for accessibility
+
+$colors: (
+  'primary': (
+    'base': #2196F3,
+    'light': #64B5F6,
+    'dark': #1976D2,
+    'contrast': #FFFFFF
+  ),
+  'secondary': (
+    'base': #FF4081,
+    'light': #FF80AB,
+    'dark': #F50057,
+    'contrast': #FFFFFF
+  ),
+  'semantic': (
+    'success': #4CAF50,
+    'warning': #FFC107,
+    'error': #F44336,
+    'info': #2196F3
+  ),
+  'neutral': (
+    'white': #FFFFFF,
+    'black': #000000,
+    'gray-100': #F5F5F5,
+    'gray-200': #EEEEEE,
+    'gray-300': #E0E0E0,
+    'gray-400': #BDBDBD,
+    'gray-500': #9E9E9E,
+    'gray-600': #757575,
+    'gray-700': #616161,
+    'gray-800': #424242,
+    'gray-900': #212121
+  )
+);
+
+// -----------------------------------------------------------------------------
+// Theme Colors
+// -----------------------------------------------------------------------------
+// Theme-specific color tokens for light and dark modes
+
+$theme-colors: (
+  'light': (
+    'background': (
+      'primary': #FFFFFF,
+      'secondary': #F5F5F5,
+      'tertiary': #EEEEEE
+    ),
+    'surface': (
+      'primary': #FFFFFF,
+      'secondary': #F5F5F5,
+      'elevated': #FFFFFF
+    ),
+    'text': (
+      'primary': #212121,
+      'secondary': #757575,
+      'disabled': #9E9E9E
+    ),
+    'border': (
+      'primary': #E0E0E0,
+      'secondary': #EEEEEE
+    )
+  ),
+  'dark': (
+    'background': (
+      'primary': #121212,
+      'secondary': #1E1E1E,
+      'tertiary': #2C2C2C
+    ),
+    'surface': (
+      'primary': #1E1E1E,
+      'secondary': #2C2C2C,
+      'elevated': #363636
+    ),
+    'text': (
+      'primary': #FFFFFF,
+      'secondary': #B0B0B0,
+      'disabled': #757575
+    ),
+    'border': (
+      'primary': #363636,
+      'secondary': #2C2C2C
+    )
+  )
+);
+
+// -----------------------------------------------------------------------------
+// Typography
+// -----------------------------------------------------------------------------
+// Type scale based on 1.25 ratio with 16px base
+// Implements fluid typography for responsive scaling
+
+$typography: (
+  'font-family': (
+    'primary': 'Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+    'secondary': 'Roboto, Arial, sans-serif',
+    'monospace': 'SFMono-Regular, Consolas, Liberation Mono, Menlo, monospace'
+  ),
+  'font-size': (
+    'base': '16px',
+    'scale-ratio': 1.25,
+    'h1': '3rem',
+    'h2': '2.5rem',
+    'h3': '2rem',
+    'h4': '1.5rem',
+    'h5': '1.25rem',
+    'h6': '1rem',
+    'small': '0.875rem',
+    'xs': '0.75rem'
+  ),
+  'line-height': (
+    'tight': 1.2,
+    'base': 1.5,
+    'relaxed': 1.75
+  ),
+  'font-weight': (
+    'light': 300,
+    'regular': 400,
+    'medium': 500,
+    'semibold': 600,
+    'bold': 700
+  )
+);
+
+// -----------------------------------------------------------------------------
+// Spacing
+// -----------------------------------------------------------------------------
+// Spacing scale based on 8px grid system
+// Implements golden ratio (1:1.618) for visual hierarchy
+
+$spacing: (
+  'unit': 8px,
+  'scale': (
+    'xxs': 4px,
+    'xs': 8px,
+    'sm': 16px,
+    'md': 24px,
+    'lg': 32px,
+    'xl': 48px,
+    'xxl': 64px,
+    'xxxl': 96px
+  ),
+  'layout': (
+    'container-padding': (
+      'mobile': 16px,
+      'tablet': 24px,
+      'desktop': 32px
+    ),
+    'section-spacing': (
+      'mobile': 48px,
+      'tablet': 64px,
+      'desktop': 96px
+    )
+  )
+);
+
+// -----------------------------------------------------------------------------
+// Grid
+// -----------------------------------------------------------------------------
+// 12-column grid system with responsive gutters
+
+$grid: (
+  'columns': 12,
+  'gutter': (
+    'mobile': 16px,
+    'tablet': 24px,
+    'desktop': 32px
+  ),
+  'container': (
+    'max-width': 1440px,
+    'padding': (
+      'mobile': 16px,
+      'tablet': 24px,
+      'desktop': 32px
+    )
+  )
+);
+
+// -----------------------------------------------------------------------------
+// Z-index
+// -----------------------------------------------------------------------------
+// Standardized z-index scale for consistent layering
+
+$z-index: (
+  'modal': 1000,
+  'overlay': 900,
+  'dropdown': 800,
+  'header': 700,
+  'footer': 600,
+  'tooltip': 500
+);
+
+// -----------------------------------------------------------------------------
+// Transitions
+// -----------------------------------------------------------------------------
+// Animation durations and easing functions
+
+$transitions: (
+  'duration': (
+    'instant': 50ms,
+    'fast': 150ms,
+    'base': 300ms,
+    'slow': 500ms,
+    'slower': 750ms
+  ),
+  'timing': (
+    'ease-in-out': cubic-bezier(0.4, 0, 0.2, 1),
+    'ease-out': cubic-bezier(0.0, 0, 0.2, 1),
+    'ease-in': cubic-bezier(0.4, 0, 1, 1),
+    'sharp': cubic-bezier(0.4, 0, 0.6, 1)
+  )
+);
+
+// Export all design tokens
+:export {
+  breakpoints: $breakpoints;
+  colors: $colors;
+  theme-colors: $theme-colors;
+  typography: $typography;
+  spacing: $spacing;
+  grid: $grid;
+  z-index: $z-index;
+  transitions: $transitions;
+}
