@@ -1,0 +1,135 @@
+# Prometheus Server Configuration ConfigMap
+# Version: v1
+# Kubernetes Version: 1.27+
+# Purpose: Defines comprehensive monitoring configuration for the Task Management System
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+  labels:
+    app: prometheus
+    component: monitoring
+    environment: production
+    version: v1
+data:
+  prometheus.yml: |
+    # Global configuration
+    global:
+      scrape_interval: 15s     # Default scrape interval for all jobs
+      evaluation_interval: 15s  # Frequency for evaluating rules
+      scrape_timeout: 10s      # Timeout for scrape requests
+      external_labels:
+        environment: production
+        cluster: task-management
+
+    # Rule files configuration
+    rule_files:
+      - /etc/prometheus/rules/*.rules
+
+    # Alerting configuration
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ['alertmanager:9093']
+          timeout: 5s
+          api_version: v2
+
+    # Scrape configurations
+    scrape_configs:
+      # Kubernetes API server monitoring
+      - job_name: 'kubernetes-apiservers'
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: endpoints
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: default;kubernetes;https
+
+      # Backend service monitoring
+      - job_name: 'task-management-backend'
+        metrics_path: /metrics
+        scrape_interval: 10s    # More frequent scraping for critical services
+        scheme: http
+        static_configs:
+          - targets: ['backend-service:8080']
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            regex: '^(http_requests_total|http_request_duration_seconds|http_request_size_bytes|http_response_size_bytes).*'
+            action: keep
+
+      # Frontend service monitoring
+      - job_name: 'task-management-frontend'
+        metrics_path: /metrics
+        scrape_interval: 10s
+        scheme: http
+        static_configs:
+          - targets: ['frontend-service:3000']
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            regex: '^(browser_timing|page_load_time|api_response_time).*'
+            action: keep
+
+      # Node monitoring
+      - job_name: 'kubernetes-nodes'
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+
+      # Pod monitoring
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+
+      # Service monitoring
+      - job_name: 'kubernetes-services'
+        kubernetes_sd_configs:
+          - role: service
+        metrics_path: /metrics
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+            action: replace
+            target_label: __scheme__
+            regex: (https?)
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+
+      # Endpoint monitoring
+      - job_name: 'kubernetes-endpoints'
+        kubernetes_sd_configs:
+          - role: endpoints
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: metrics
