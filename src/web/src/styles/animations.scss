@@ -1,0 +1,232 @@
+// =============================================================================
+// Core Animation System
+// =============================================================================
+// Enterprise-grade animation utilities implementing Material Design 3 principles
+// with performance optimization and accessibility considerations.
+// Version: 1.0.0
+
+@import './variables';
+
+// -----------------------------------------------------------------------------
+// Animation Configuration
+// -----------------------------------------------------------------------------
+
+// Duration tokens for consistent timing across animations
+$animation-duration: (
+  'short': 150ms,
+  'medium': 300ms,
+  'long': 500ms,
+  'responsive': (
+    'mobile': 200ms,
+    'tablet': 250ms,
+    'desktop': 300ms
+  )
+);
+
+// Material Design 3 easing curves for natural motion
+$animation-easing: (
+  'standard': cubic-bezier(0.4, 0, 0.2, 1),
+  'accelerate': cubic-bezier(0.4, 0, 1, 1),
+  'decelerate': cubic-bezier(0, 0, 0.2, 1),
+  'sharp': cubic-bezier(0.4, 0, 0.6, 1),
+  'emphasized': cubic-bezier(0.2, 0, 0, 1)
+);
+
+// Performance optimization hints
+$animation-performance: (
+  'will-change-transform': transform,
+  'will-change-opacity': opacity,
+  'gpu-acceleration': translate3d(0, 0, 0)
+);
+
+// -----------------------------------------------------------------------------
+// Animation Mixins
+// -----------------------------------------------------------------------------
+
+// Performance-optimized fade animation
+@mixin fade-in($duration: 'medium', $use-gpu: true) {
+  animation: fadeIn map-get($animation-duration, $duration) map-get($animation-easing, 'standard') forwards;
+  will-change: map-get($animation-performance, 'will-change-opacity');
+  @if $use-gpu {
+    transform: map-get($animation-performance, 'gpu-acceleration');
+  }
+  
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+// Performance-optimized slide animation
+@mixin slide-in($direction: 'left', $duration: 'medium', $use-gpu: true) {
+  $animation-name: slideIn#{capitalize($direction)};
+  animation: #{$animation-name} map-get($animation-duration, $duration) map-get($animation-easing, 'decelerate') forwards;
+  will-change: map-get($animation-performance, 'will-change-transform');
+  @if $use-gpu {
+    transform: map-get($animation-performance, 'gpu-acceleration');
+  }
+  
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    transform: none;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Keyframe Animations
+// -----------------------------------------------------------------------------
+
+// Fade animations
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes fadeOut {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+// Slide animations
+@keyframes slideInLeft {
+  0% {
+    transform: translate3d(-100%, 0, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes slideInRight {
+  0% {
+    transform: translate3d(100%, 0, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes slideInUp {
+  0% {
+    transform: translate3d(0, 100%, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes slideInDown {
+  0% {
+    transform: translate3d(0, -100%, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+// Scale animations
+@keyframes scaleIn {
+  0% {
+    transform: scale3d(0, 0, 1);
+  }
+  100% {
+    transform: scale3d(1, 1, 1);
+  }
+}
+
+// Rotation animation
+@keyframes rotate {
+  0% {
+    transform: rotate3d(0, 0, 1, 0deg);
+  }
+  100% {
+    transform: rotate3d(0, 0, 1, 360deg);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Animation Utility Classes
+// -----------------------------------------------------------------------------
+
+// Fade utilities
+.fade-in {
+  @include fade-in('medium', true);
+}
+
+.fade-out {
+  animation: fadeOut map-get($animation-duration, 'medium') map-get($animation-easing, 'standard') forwards;
+  will-change: opacity;
+  transform: translate3d(0, 0, 0);
+  
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+// Slide utilities
+.slide-in-left {
+  @include slide-in('left', 'medium', true);
+}
+
+.slide-in-right {
+  @include slide-in('right', 'medium', true);
+}
+
+.slide-in-up {
+  @include slide-in('up', 'medium', true);
+}
+
+.slide-in-down {
+  @include slide-in('down', 'medium', true);
+}
+
+// Scale utility
+.scale-in {
+  animation: scaleIn map-get($animation-duration, 'medium') map-get($animation-easing, 'standard') forwards;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    transform: none;
+  }
+}
+
+// Rotation utility
+.rotate {
+  animation: rotate map-get($animation-duration, 'long') map-get($animation-easing, 'standard') infinite;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    transform: none;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Responsive Animation Durations
+// -----------------------------------------------------------------------------
+
+@each $breakpoint, $duration in map-get($animation-duration, 'responsive') {
+  @media (min-width: map-get($breakpoints, $breakpoint)) {
+    [class*='fade-'],
+    [class*='slide-'],
+    [class*='scale-'] {
+      animation-duration: $duration;
+    }
+  }
+}
