@@ -1,0 +1,128 @@
+# PostgreSQL StatefulSet and Service Configuration
+# Version: PostgreSQL 15
+# Kubernetes Version: 1.27+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: task-management
+  labels:
+    app: postgres
+    tier: database
+spec:
+  serviceName: postgres
+  replicas: 2  # Primary and replica for high availability
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+        tier: database
+    spec:
+      # Security context for PostgreSQL container
+      securityContext:
+        fsGroup: 999  # postgres group
+        runAsUser: 999  # postgres user
+        runAsGroup: 999
+      # Pod anti-affinity to ensure high availability across nodes
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: postgres
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: postgres
+          image: postgres:15
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+              name: postgresql
+          # Environment variables from secrets
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: DATABASE_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: DATABASE_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            # Additional PostgreSQL configurations
+            - name: POSTGRES_DB
+              value: taskmanagement
+            - name: POSTGRES_INITDB_ARGS
+              value: "--data-checksums"
+          # Resource limits and requests
+          resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          # Volume mounts for persistent storage
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          # Liveness probe configuration
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - $(POSTGRES_USER)
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          # Readiness probe configuration
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - $(POSTGRES_USER)
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+  # Persistent volume claim template
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: ebs-sc
+        resources:
+          requests:
+            storage: 50Gi  # Production-grade storage size
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: task-management
+  labels:
+    app: postgres
+    tier: database
+spec:
+  clusterIP: None  # Headless service for StatefulSet
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgresql
+  selector:
+    app: postgres
+  sessionAffinity: ClientIP  # Maintain session affinity for consistent connections
+  publishNotReadyAddresses: false  # Only publish ready pods
