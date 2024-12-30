@@ -1,0 +1,196 @@
+# Logstash Kubernetes Manifest
+# Version: 8.0+
+# Dependencies:
+# - kubernetes: 1.27+
+# - logstash: 8.0+
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logstash-config
+  namespace: monitoring
+data:
+  logstash.yml: |
+    http.host: "0.0.0.0"
+    monitoring.enabled: true
+    monitoring.collection.interval: 10s
+    monitoring.elasticsearch.hosts: ["http://elasticsearch:9200"]
+    monitoring.elasticsearch.username: ${ELASTICSEARCH_USERNAME}
+    monitoring.elasticsearch.password: ${ELASTICSEARCH_PASSWORD}
+    monitoring.elasticsearch.ssl.verification_mode: certificate
+    pipeline.workers: 2
+    pipeline.batch.size: 125
+    pipeline.batch.delay: 50
+    queue.type: persisted
+    queue.max_bytes: 1gb
+    queue.checkpoint.writes: 1000
+    path.logs: /var/log/logstash
+    log.rotation.type: daily
+    log.rotation.max_size: 1gb
+    log.rotation.max_files: 7
+    log.rotation.compress: true
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: logstash
+  namespace: monitoring
+  labels:
+    app: logstash
+    component: logging
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9600"
+    prometheus.io/path: "/_node/stats"
+spec:
+  type: ClusterIP
+  ports:
+    - name: beats
+      port: 5044
+      targetPort: 5044
+      protocol: TCP
+    - name: http
+      port: 9600
+      targetPort: 9600
+      protocol: TCP
+  selector:
+    app: logstash
+  sessionAffinity: ClientIP
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: logstash
+  namespace: monitoring
+  labels:
+    app: logstash
+    component: logging
+spec:
+  serviceName: logstash
+  replicas: 2
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+  selector:
+    matchLabels:
+      app: logstash
+  template:
+    metadata:
+      labels:
+        app: logstash
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9600"
+        prometheus.io/path: "/_node/stats"
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - logstash
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+        - name: logstash
+          image: docker.elastic.co/logstash/logstash:8.0.0
+          securityContext:
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: beats
+              containerPort: 5044
+              protocol: TCP
+            - name: http
+              containerPort: 9600
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+              ephemeral-storage: 1Gi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+              ephemeral-storage: 2Gi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 9600
+              scheme: HTTP
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 9600
+              scheme: HTTP
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /
+              port: 9600
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 30
+          env:
+            - name: ELASTICSEARCH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: elasticsearch-credentials
+                  key: username
+            - name: ELASTICSEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: elasticsearch-credentials
+                  key: password
+            - name: LS_JAVA_OPTS
+              value: "-Xms512m -Xmx512m"
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/logstash/config/logstash.yml
+              subPath: logstash.yml
+            - name: data
+              mountPath: /usr/share/logstash/data
+            - name: logs
+              mountPath: /var/log/logstash
+      volumes:
+        - name: config
+          configMap:
+            name: logstash-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+    - metadata:
+        name: logs
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
