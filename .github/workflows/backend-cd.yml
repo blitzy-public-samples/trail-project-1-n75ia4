@@ -1,0 +1,165 @@
+# Backend Continuous Deployment Workflow
+# Version: 1.0.0
+# Handles automated deployment of backend service to Kubernetes with security and monitoring
+
+name: Backend CD
+
+# Trigger on successful completion of Backend CI workflow
+on:
+  workflow_run:
+    workflows: ["Backend CI"]
+    types: [completed]
+    branches: [main]
+
+# Environment variables
+env:
+  AWS_REGION: us-west-2
+  ECR_REPOSITORY: task-management/backend
+  EKS_CLUSTER: task-management-cluster
+  KUBERNETES_NAMESPACE: task-management
+  DEPLOYMENT_TIMEOUT: 10m
+  HEALTH_CHECK_RETRIES: 5
+
+# Concurrency control to prevent parallel deployments
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: false
+
+# Required permissions for secure operations
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+  deployments: write
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    
+    # Only proceed if CI workflow was successful
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    
+    steps:
+      # Checkout repository
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      # Configure AWS Credentials using OIDC
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: true
+
+      # Setup Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          version: latest
+          buildkitd-flags: --debug
+
+      # Login to Amazon ECR
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+        id: ecr-login
+
+      # Build and Push Docker Image
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NODE_ENV=production
+            BUILD_VERSION=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
+          platforms: linux/amd64
+          provenance: true
+          sbom: true
+
+      # Security scan of built image
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+      # Update Kubernetes Config
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
+
+      # Update Deployment Manifest
+      - name: Update Deployment Image
+        run: |
+          sed -i "s|image:.*|image: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}|g" \
+          infrastructure/kubernetes/backend/deployment.yaml
+
+      # Deploy to Kubernetes
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f infrastructure/kubernetes/backend/deployment.yaml
+          kubectl apply -f infrastructure/kubernetes/backend/service.yaml
+          kubectl rollout status deployment/backend-deployment -n ${{ env.KUBERNETES_NAMESPACE }} --timeout=${{ env.DEPLOYMENT_TIMEOUT }}
+
+      # Verify Deployment Health
+      - name: Verify Deployment Health
+        run: |
+          RETRIES=${{ env.HEALTH_CHECK_RETRIES }}
+          while [ $RETRIES -gt 0 ]; do
+            if kubectl get pods -n ${{ env.KUBERNETES_NAMESPACE }} -l app=backend \
+              -o jsonpath='{.items[*].status.containerStatuses[*].ready}' | grep -q "true"; then
+              echo "Deployment healthy"
+              exit 0
+            fi
+            RETRIES=$((RETRIES-1))
+            sleep 30
+          done
+          echo "Deployment health check failed"
+          kubectl rollout undo deployment/backend-deployment -n ${{ env.KUBERNETES_NAMESPACE }}
+          exit 1
+
+      # Update Monitoring
+      - name: Update Monitoring Configuration
+        if: success()
+        run: |
+          curl -X POST ${{ secrets.MONITORING_ENDPOINT }} \
+            -H "Authorization: Bearer ${{ secrets.MONITORING_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"deployment\":\"backend\",\"version\":\"${{ github.sha }}\",\"status\":\"completed\"}"
+
+      # Create Deployment Status
+      - name: Update Deployment Status
+        if: always()
+        uses: actions/create-deployment-status@v1
+        with:
+          state: ${{ job.status == 'success' && 'success' || 'failure' }}
+          deployment_id: ${{ github.event.deployment.id }}
+          description: "Backend deployment to production ${{ job.status == 'success' && 'completed successfully' || 'failed' }}"
+          environment_url: ${{ secrets.PRODUCTION_URL }}
+
+      # Notify on Failure
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          curl -X POST ${{ secrets.ALERT_WEBHOOK }} \
+            -H "Content-Type: application/json" \
+            -d "{\"text\":\"⚠️ Backend deployment failed for commit ${{ github.sha }}. Please check the deployment logs.\"}"
