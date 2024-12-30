@@ -1,0 +1,193 @@
+# Elasticsearch Kubernetes Manifest
+# Version: elasticsearch 8.0+
+# Kubernetes API version: 1.27+
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: elasticsearch-config
+  namespace: monitoring
+  labels:
+    app: elasticsearch
+data:
+  elasticsearch.yml: |
+    cluster.name: task-management-monitoring
+    node.name: ${HOSTNAME}
+    network.host: 0.0.0.0
+    discovery.seed_hosts: elasticsearch-0.elasticsearch,elasticsearch-1.elasticsearch,elasticsearch-2.elasticsearch
+    cluster.initial_master_nodes: elasticsearch-0,elasticsearch-1,elasticsearch-2
+    xpack.security.enabled: true
+    xpack.monitoring.collection.enabled: true
+    xpack.security.transport.ssl.enabled: true
+    bootstrap.memory_lock: true
+    indices.query.bool.max_clause_count: 2048
+    search.max_buckets: 100000
+    thread_pool.write.queue_size: 1000
+    indices.memory.index_buffer_size: 30%
+    indices.fielddata.cache.size: 20%
+    indices.recovery.max_bytes_per_sec: 50mb
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch
+  namespace: monitoring
+  labels:
+    app: elasticsearch
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9200"
+    prometheus.io/path: "/_cluster/health"
+spec:
+  type: ClusterIP
+  ports:
+    - name: rest
+      port: 9200
+      targetPort: 9200
+      protocol: TCP
+    - name: inter-node
+      port: 9300
+      targetPort: 9300
+      protocol: TCP
+  selector:
+    app: elasticsearch
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: elasticsearch
+  namespace: monitoring
+  labels:
+    app: elasticsearch
+spec:
+  serviceName: elasticsearch
+  replicas: 3
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: elasticsearch
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9200"
+        prometheus.io/path: "/_cluster/health"
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
+      initContainers:
+        - name: fix-permissions
+          image: busybox:1.32
+          command: ["sh", "-c", "chown -R 1000:1000 /usr/share/elasticsearch/data"]
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: elasticsearch-data
+              mountPath: /usr/share/elasticsearch/data
+        - name: increase-vm-max-map
+          image: busybox:1.32
+          command: ["sysctl", "-w", "vm.max_map_count=262144"]
+          securityContext:
+            privileged: true
+        - name: increase-fd-ulimit
+          image: busybox:1.32
+          command: ["sh", "-c", "ulimit -n 65536"]
+          securityContext:
+            privileged: true
+      containers:
+        - name: elasticsearch
+          image: docker.elastic.co/elasticsearch/elasticsearch:8.0.0
+          resources:
+            requests:
+              cpu: "1"
+              memory: "4Gi"
+            limits:
+              cpu: "2"
+              memory: "8Gi"
+          ports:
+            - containerPort: 9200
+              name: rest
+              protocol: TCP
+            - containerPort: 9300
+              name: inter-node
+              protocol: TCP
+          env:
+            - name: ES_JAVA_OPTS
+              value: "-Xms4g -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+            - name: bootstrap.memory_lock
+              value: "true"
+          volumeMounts:
+            - name: elasticsearch-data
+              mountPath: /usr/share/elasticsearch/data
+            - name: elasticsearch-config
+              mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+              subPath: elasticsearch.yml
+          readinessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+              scheme: HTTPS
+            initialDelaySeconds: 90
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+              scheme: HTTPS
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: elasticsearch
+      volumes:
+        - name: elasticsearch-config
+          configMap:
+            name: elasticsearch-config
+  volumeClaimTemplates:
+    - metadata:
+        name: elasticsearch-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp2
+        resources:
+          requests:
+            storage: 200Gi
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: elasticsearch-monitor
+  namespace: monitoring
+  labels:
+    app: elasticsearch
+spec:
+  selector:
+    matchLabels:
+      app: elasticsearch
+  endpoints:
+    - port: rest
+      interval: 30s
+      scrapeTimeout: 10s
+      path: /_cluster/health
