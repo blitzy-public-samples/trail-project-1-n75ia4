@@ -1,0 +1,171 @@
+# Security Scan Workflow v1.0.0
+# Comprehensive security scanning for Task Management System
+# Includes SAST, dependency scanning, and secret detection
+
+name: Security Scan
+
+on:
+  push:
+    branches: 
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly scan on Sundays at midnight
+
+env:
+  NODE_VERSION: '20.x'
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  SECURITY_ALERTS_EMAIL: ${{ secrets.SECURITY_ALERTS_EMAIL }}
+
+jobs:
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4  # v4.1.1
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4  # v4.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: |
+          cd src/backend && npm ci
+          cd ../web && npm ci
+          
+      - name: Run backend dependency audit
+        run: |
+          cd src/backend
+          npm audit --audit-level=high --json > backend-audit.json || true
+          
+      - name: Run frontend dependency audit
+        run: |
+          cd src/web
+          npm audit --audit-level=high --json > frontend-audit.json || true
+          
+      - name: Analyze audit results
+        run: |
+          if grep -q '"critical":' */audit.json; then
+            echo "Critical vulnerabilities found!"
+            exit 1
+          fi
+          
+      - name: Upload audit results
+        uses: actions/upload-artifact@v3
+        with:
+          name: dependency-audit-reports
+          path: |
+            src/backend/backend-audit.json
+            src/web/frontend-audit.json
+
+  sast-analysis:
+    name: Static Application Security Testing
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2  # v2.22.5
+        with:
+          languages: javascript, typescript
+          queries: security-extended
+          
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+        with:
+          category: "/language:javascript,typescript"
+          upload: true
+          output: sarif-results
+          
+      - name: Upload SAST results
+        uses: actions/upload-artifact@v3
+        with:
+          name: codeql-sarif-results
+          path: sarif-results
+
+  secret-detection:
+    name: Secret and Sensitive Data Detection
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Run secret scanning
+        uses: gitleaks/gitleaks-action@v2  # v2.3.2
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+        with:
+          config-path: .gitleaks.toml
+          verbose: true
+          
+      - name: Check for sensitive data patterns
+        run: |
+          ! find . -type f -not -path "./.git/*" -exec grep -l -E "(api[_-]?key|secret|password|token)['\"]?\s*[:=]\s*['\"]\S+['\"]" {} \;
+          
+      - name: Upload secret scan results
+        uses: actions/upload-artifact@v3
+        with:
+          name: secret-scan-results
+          path: results.sarif
+        if: always()
+
+  security-report:
+    name: Generate Security Report
+    needs: [dependency-scan, sast-analysis, secret-detection]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Download all scan results
+        uses: actions/download-artifact@v3
+        with:
+          path: scan-results
+          
+      - name: Generate consolidated report
+        run: |
+          echo "Security Scan Summary - $(date)" > security-report.md
+          echo "===================================" >> security-report.md
+          echo "## Dependency Scan Results" >> security-report.md
+          cat scan-results/dependency-audit-reports/*.json >> security-report.md
+          echo "## SAST Analysis Results" >> security-report.md
+          cat scan-results/codeql-sarif-results/*.sarif >> security-report.md
+          echo "## Secret Detection Results" >> security-report.md
+          cat scan-results/secret-scan-results/*.sarif >> security-report.md
+          
+      - name: Upload consolidated report
+        uses: actions/upload-artifact@v3
+        with:
+          name: consolidated-security-report
+          path: security-report.md
+          
+      - name: Send email notification
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: Security Scan Alert - ${{ github.repository }}
+          to: ${{ env.SECURITY_ALERTS_EMAIL }}
+          from: GitHub Actions
+          body: Security scan has detected potential vulnerabilities. Please check the consolidated report.
+          attachments: security-report.md
