@@ -1,0 +1,139 @@
+# Kubernetes RBAC Configuration v1.27+
+# Purpose: Implements zero-trust security model with granular role-based permissions
+# for the Task Management System
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: backend-role
+  namespace: task-management
+  labels:
+    app: task-management
+    component: security
+    type: rbac
+  annotations:
+    description: "Restricted role for backend microservices with least-privilege access"
+    security.taskmanagement.io/audit: "true"
+rules:
+  # Backend service permissions with explicit resource naming
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    resourceNames: ["backend-*", "api-*"]
+  # Read-only access to deployments and statefulsets
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+    resourceNames: ["backend-*"]
+  # Pod security policy usage
+  - apiGroups: ["policy"]
+    resources: ["podsecuritypolicies"]
+    verbs: ["use"]
+    resourceNames: ["restricted"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: monitoring-role
+  namespace: monitoring
+  labels:
+    app: task-management
+    component: monitoring
+    type: rbac
+  annotations:
+    description: "Read-only role for monitoring tools with specific metric collection permissions"
+    security.taskmanagement.io/audit: "true"
+rules:
+  # Read-only monitoring permissions
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "nodes"]
+    verbs: ["get", "list", "watch"]
+  # Monitoring pod security policy usage
+  - apiGroups: ["policy"]
+    resources: ["podsecuritypolicies"]
+    verbs: ["use"]
+    resourceNames: ["monitoring"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: backend-role-binding
+  namespace: task-management
+  labels:
+    app: task-management
+    component: security
+    type: rbac
+  annotations:
+    description: "Explicit binding for backend service with namespace isolation"
+subjects:
+- kind: ServiceAccount
+  name: backend-service
+  namespace: task-management
+roleRef:
+  kind: Role
+  name: backend-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: monitoring-role-binding
+  namespace: monitoring
+  labels:
+    app: task-management
+    component: monitoring
+    type: rbac
+  annotations:
+    description: "Restricted binding for monitoring service"
+subjects:
+- kind: ServiceAccount
+  name: monitoring-service
+  namespace: monitoring
+roleRef:
+  kind: Role
+  name: monitoring-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Cache service role for Redis operations
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cache-role
+  namespace: task-management
+  labels:
+    app: task-management
+    component: cache
+    type: rbac
+  annotations:
+    description: "Restricted role for cache service operations"
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+    resourceNames: ["cache-*", "redis-*"]
+  - apiGroups: ["policy"]
+    resources: ["podsecuritypolicies"]
+    verbs: ["use"]
+    resourceNames: ["restricted"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cache-role-binding
+  namespace: task-management
+  labels:
+    app: task-management
+    component: cache
+    type: rbac
+subjects:
+- kind: ServiceAccount
+  name: cache-service
+  namespace: task-management
+roleRef:
+  kind: Role
+  name: cache-role
+  apiGroup: rbac.authorization.k8s.io
