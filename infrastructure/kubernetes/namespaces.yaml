@@ -1,0 +1,208 @@
+# Kubernetes v1.27+
+# Purpose: Define isolated namespaces with resource quotas and security policies for the Task Management System
+
+---
+# Task Management Backend Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: task-management
+  labels:
+    name: task-management
+    environment: production
+    app: task-management-system
+    tier: backend
+    version: 1.0.0
+  annotations:
+    description: "Main namespace for Task Management System backend services"
+    owner: "platform-team"
+    security-level: "high"
+    backup-policy: "daily"
+
+---
+# Resource Quota for Task Management Namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: task-management-quota
+  namespace: task-management
+spec:
+  hard:
+    requests.cpu: "4000m"
+    requests.memory: "8Gi"
+    limits.cpu: "8000m"
+    limits.memory: "16Gi"
+    pods: "20"
+    configmaps: "50"
+    secrets: "50"
+    persistentvolumeclaims: "10"
+
+---
+# Frontend Web Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: web
+  labels:
+    name: web
+    environment: production
+    app: task-management-system
+    tier: frontend
+    version: 1.0.0
+  annotations:
+    description: "Namespace for Task Management System frontend application"
+    owner: "frontend-team"
+    security-level: "medium"
+    backup-policy: "daily"
+
+---
+# Resource Quota for Web Namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: web-quota
+  namespace: web
+spec:
+  hard:
+    requests.cpu: "2000m"
+    requests.memory: "4Gi"
+    limits.cpu: "4000m"
+    limits.memory: "8Gi"
+    pods: "10"
+    configmaps: "20"
+    secrets: "20"
+    persistentvolumeclaims: "5"
+
+---
+# Monitoring Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
+    environment: production
+    app: task-management-system
+    tier: monitoring
+    version: 1.0.0
+  annotations:
+    description: "Namespace for monitoring and observability stack"
+    owner: "platform-team"
+    security-level: "medium"
+    retention-policy: "30d"
+
+---
+# Resource Quota for Monitoring Namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: monitoring-quota
+  namespace: monitoring
+spec:
+  hard:
+    requests.cpu: "4000m"
+    requests.memory: "8Gi"
+    limits.cpu: "8000m"
+    limits.memory: "16Gi"
+    pods: "15"
+    configmaps: "30"
+    secrets: "30"
+    persistentvolumeclaims: "10"
+
+---
+# Storage Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: storage
+  labels:
+    name: storage
+    environment: production
+    app: task-management-system
+    tier: storage
+    version: 1.0.0
+  annotations:
+    description: "Namespace for database and cache services"
+    owner: "platform-team"
+    security-level: "high"
+    backup-policy: "hourly"
+
+---
+# Resource Quota for Storage Namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: storage-quota
+  namespace: storage
+spec:
+  hard:
+    requests.cpu: "4000m"
+    requests.memory: "16Gi"
+    limits.cpu: "8000m"
+    limits.memory: "32Gi"
+    pods: "10"
+    configmaps: "20"
+    secrets: "30"
+    persistentvolumeclaims: "20"
+
+---
+# Default Pod Security Policy
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: task-management-restricted
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'runtime/default'
+    seccomp.security.alpha.kubernetes.io/defaultProfileName: 'runtime/default'
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - ALL
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    rule: 'MustRunAsNonRoot'
+  seLinux:
+    rule: 'RunAsAny'
+  supplementalGroups:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1
+        max: 65535
+  fsGroup:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1
+        max: 65535
+  readOnlyRootFilesystem: true
+
+---
+# Network Policy Template (to be applied to each namespace)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: task-management
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: task-management
