@@ -1,0 +1,196 @@
+// =============================================================================
+// Core SCSS Mixins
+// =============================================================================
+// Enterprise-grade mixins for consistent component styling, responsive design,
+// accessibility, and theming across the application.
+// Version: 1.0.0
+
+@import './variables';
+
+// -----------------------------------------------------------------------------
+// Responsive Design Mixins
+// -----------------------------------------------------------------------------
+
+@mixin responsive($breakpoint, $orientation: null, $custom-value: null) {
+  $break-value: if($custom-value, $custom-value, map-get($breakpoints, $breakpoint));
+  
+  @if not $break-value {
+    @error 'Invalid breakpoint: #{$breakpoint}';
+  }
+
+  @if $orientation {
+    @media screen and (min-width: #{$break-value}) and (orientation: #{$orientation}) {
+      @content;
+    }
+  } @else {
+    @media screen and (min-width: #{$break-value}) {
+      @content;
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Typography Mixins
+// -----------------------------------------------------------------------------
+
+@function fluid-type($min-size, $max-size, $min-vw: map-get($breakpoints, 'mobile'), $max-vw: map-get($breakpoints, 'large')) {
+  $min-size-rem: $min-size / 16 + rem;
+  $max-size-rem: $max-size / 16 + rem;
+  
+  @return clamp(
+    #{$min-size-rem},
+    #{calc($min-size + ($max-size - $min-size) * ((100vw - #{$min-vw}) / (#{$max-vw} - #{$min-vw})))},
+    #{$max-size-rem}
+  );
+}
+
+@mixin fluid-text($size-key) {
+  $sizes: map-get($typography, 'font-size');
+  $base-size: strip-unit(map-get($sizes, $size-key));
+  $min-size: $base-size * 0.875;
+  $max-size: $base-size;
+  
+  font-size: fluid-type($min-size, $max-size);
+}
+
+// -----------------------------------------------------------------------------
+// Layout & Visual Hierarchy Mixins
+// -----------------------------------------------------------------------------
+
+@mixin golden-ratio-spacing($direction: 'all') {
+  $ratio: 1.618;
+  $base: map-get(map-get($spacing, 'scale'), 'base');
+  
+  @if $direction == 'all' {
+    padding: $base ($base * $ratio);
+  } @else if $direction == 'horizontal' {
+    padding-left: $base * $ratio;
+    padding-right: $base * $ratio;
+  } @else if $direction == 'vertical' {
+    padding-top: $base * $ratio;
+    padding-bottom: $base * $ratio;
+  }
+}
+
+@mixin content-width {
+  max-width: map-get($breakpoints, 'content-max');
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: map-get(map-get($grid, 'container'), 'padding', 'mobile');
+  padding-right: map-get(map-get($grid, 'container'), 'padding', 'mobile');
+  
+  @include responsive('tablet') {
+    padding-left: map-get(map-get($grid, 'container'), 'padding', 'tablet');
+    padding-right: map-get(map-get($grid, 'container'), 'padding', 'tablet');
+  }
+  
+  @include responsive('desktop') {
+    padding-left: map-get(map-get($grid, 'container'), 'padding', 'desktop');
+    padding-right: map-get(map-get($grid, 'container'), 'padding', 'desktop');
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Accessibility Mixins
+// -----------------------------------------------------------------------------
+
+@mixin a11y-focus($color: map-get(map-get($colors, 'primary'), 'base'), $width: 2px) {
+  &:focus-visible {
+    outline: $width solid $color;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba($color, 0.2);
+  }
+  
+  &:focus:not(:focus-visible) {
+    outline: none;
+    box-shadow: none;
+  }
+}
+
+@mixin reduced-motion {
+  @media (prefers-reduced-motion: reduce) {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+@mixin screen-reader-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+// -----------------------------------------------------------------------------
+// Theme Mixins
+// -----------------------------------------------------------------------------
+
+@mixin theme-aware($property, $theme-map, $default-value: null) {
+  @each $theme, $map in $theme-colors {
+    [data-theme='#{$theme}'] & {
+      #{$property}: map-get($map, $theme-map);
+    }
+  }
+  
+  @if $default-value {
+    #{$property}: $default-value;
+  }
+}
+
+@mixin high-contrast-mode {
+  @media (forced-colors: active) {
+    @content;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// RTL Support Mixins
+// -----------------------------------------------------------------------------
+
+@mixin rtl {
+  [dir='rtl'] & {
+    @content;
+  }
+}
+
+@mixin logical-property($property, $value) {
+  @if $property == 'margin' or $property == 'padding' {
+    #{$property}-inline-start: $value;
+    #{$property}-inline-end: $value;
+  } @else if $property == 'border' {
+    border-inline-start: $value;
+    border-inline-end: $value;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Animation & Transition Mixins
+// -----------------------------------------------------------------------------
+
+@mixin animate($properties...) {
+  $duration: map-get(map-get($transitions, 'duration'), 'base');
+  $easing: map-get(map-get($transitions, 'timing'), 'ease-in-out');
+  
+  transition-property: $properties;
+  transition-duration: $duration;
+  transition-timing-function: $easing;
+  
+  @include reduced-motion;
+}
+
+// Export all mixins for use in components
+:export {
+  mixins: (
+    responsive: true,
+    fluid-type: true,
+    golden-ratio: true,
+    a11y: true,
+    theme: true,
+    rtl: true
+  );
+}
